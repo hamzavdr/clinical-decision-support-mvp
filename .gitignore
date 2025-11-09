@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env*
+.env.*
 vectorstore/
 data/blocks*.json
 .DS_Store
