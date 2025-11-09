@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env*
+vectorstore/
+data/blocks*.json
+.DS_Store
+.vscode/
+.idea/
+*.log
