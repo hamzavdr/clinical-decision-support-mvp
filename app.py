@@ -28,12 +28,9 @@ from scripts.llm_rag_demo import (
 st.set_page_config(page_title="Heidi CDS (PoC)", layout="centered")
 st.title("Clinical Decision Support (Tool)")
 st.caption("""
-This app uses a Retrieval-Augmented Generation (RAG) approach to provide clinical decision support. First, it takes your clinical note and uses an LLM to generate search queries. These queries are then used to retrieve relevant information from a medical guideline document stored in a vector database. 
-The system uses a "sliding window" approach for retrieval, which was chosen because the medical guideline has chapters of variable length. This method ensures that critical context is maintained by stitching together neighboring text chunks around a search result, preventing important information from being lost across section breaks. 
-It retrieves the top k neighbors (most relevant chunks) based on the search queries. 
-Finally, the LLM uses this retrieved context to generate a tailored management plan, complete with citations to the guideline.
-Additionally, a dosing table can be generated from the management plan. This process involves two more LLM steps: first, the plan is analyzed to create specific, dosing-focused search queries (e.g., 'prednisone dose mg/kg'). These queries then retrieve relevant sections from the guideline. Finally, the LLM uses this context to build a structured markdown table with details like drug, route, dose, and frequency.
-A dosing calculator is included to calculate dosages based on the recommendations.
+This app uses a Retrieval-Augmented Generation (RAG) approach to provide clinical decision support. 
+It uses a sliding window approach to maintain context. Control the number of chunks with k-hyperparameter.
+The context is stitched together with the 
 """)
 
 DB_PATH = str(Path.cwd() / "chroma_db")
@@ -239,7 +236,7 @@ with st.sidebar:
         doc_id = st.selectbox("Guideline Document", all_doc_ids, index=default_index)
 
     # Retrieval hyperparams
-    k = st.slider("Top-k", 1, 10, 4)
+    k = st.slider("Top-k (number of chunks retrieved)", 1, 10, 4)
     above = st.number_input("Neighbors above", min_value=0, max_value=3, value=1, step=1)
     below = st.number_input("Neighbors below", min_value=0, max_value=4, value=2, step=1)
 
@@ -418,4 +415,23 @@ with st.expander("Debug: vector store contents on server"):
             st.code(d)
     except Exception as e:
         st.error(f"Failed to inspect vector store: {e}")
+
+with st.expander("🔎 Retrieval diagnostics"):
+    try:
+        rag_dbg = RAGClient(db_path=DB_PATH)
+        # Count windows per doc_id on the server
+        metas = rag_dbg.coll.get(include=["metadatas"]).get("metadatas") or []
+        counts = {}
+        for m in metas:
+            d = m.get("doc_id")
+            if d: counts[d] = counts.get(d, 0) + 1
+        st.write("Doc IDs & window counts on server:")
+        for k,v in sorted(counts.items()):
+            st.write(f"- {k}: {v} windows")
+
+        st.write("Selected Document ID:", st.session_state.get("doc_id_used") or "(none)")
+        st.write("Queries last used:", st.session_state.get("queries", []))
+    except Exception as e:
+        st.error(f"Diagnostics failed: {e}")
+
 
