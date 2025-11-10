@@ -30,7 +30,8 @@ st.title("Clinical Decision Support (Tool)")
 st.caption("""
 This app uses a Retrieval-Augmented Generation (RAG) approach to provide clinical decision support. 
 It uses a sliding window approach to maintain context. Control the number of chunks with k-hyperparameter.
-The context is stitched together with the 
+The context is stitched together with the preceding and following chunks (i.e the chunk above and the chunk below).
+This context is used to generate the management plans and the dosing tables.
 """)
 
 DB_PATH = str(Path.cwd() / "chroma_db")
