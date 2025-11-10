@@ -1,15 +1,16 @@
-# --- Core ---
-chromadb>=0.5.4
-numpy>=1.26 # A dependency of sentence-transformers
-tqdm>=4.66 # Used by sentence-transformers for progress bars
-requests>=2.31.0 # For OpenAI API calls in llm_rag_demo.py
-python-dotenv>=1.0
-streamlit>=1.0
-PyMuPDF>=1.24 # Provides 'fitz' for ingest.py and split_pdf.py
+--extra-index-url https://download.pytorch.org/whl/cpu
 
-# Embeddings & LLM calls
+# --- Core (pin to stable) ---
+streamlit==1.51.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+chromadb==0.5.15
+pydantic>=2.8.2
+tqdm>=4.66.0
+PyMuPDF==1.26.6
+
+# --- Embedding stack (CPU, Py3.13 compatible) ---
 sentence-transformers==2.6.1
 transformers==4.44.2
 safetensors==0.4.4
-torch==2.4.1+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.0+cpu
