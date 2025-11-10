@@ -150,7 +150,7 @@ class RAGClient:
     def __init__(self, db_path="./chroma_db", collection="guidelines", embed_model=EMBED_MODEL):
         self.client = chromadb.PersistentClient(path=db_path, settings=Settings())
         self.coll = self.client.get_or_create_collection(name=collection)
-        self.embedder = SentenceTransformer(embed_model)
+        self.embedder = SentenceTransformer(embed_model, device="cpu")
 
     def list_doc_ids(self) -> List[str]:
         res = self.coll.get(include=["metadatas"])

@@ -2,16 +2,14 @@
 chromadb>=0.5.4
 numpy>=1.26 # A dependency of sentence-transformers
 tqdm>=4.66 # Used by sentence-transformers for progress bars
-
-# Optional utils
+requests>=2.31.0 # For OpenAI API calls in llm_rag_demo.py
 python-dotenv>=1.0
-
-# Streamlit
 streamlit>=1.0
-
-# PDF parsing
 PyMuPDF>=1.24 # Provides 'fitz' for ingest.py and split_pdf.py
 
 # Embeddings & LLM calls
-sentence-transformers>=2.2.2
-requests>=2.31.0 # For OpenAI API calls in llm_rag_demo.py
+sentence-transformers==2.6.1
+transformers==4.44.2
+safetensors==0.4.4
+torch==2.4.1+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
