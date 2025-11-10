@@ -26,8 +26,15 @@ from scripts.llm_rag_demo import (
 
 # ---- Streamlit page ----
 st.set_page_config(page_title="Heidi CDS (PoC)", layout="centered")
-st.title("Heidi • Clinical Decision Support (PoC)")
-st.caption("Demo only — not medical advice.")
+st.title("Clinical Decision Support (Tool)")
+st.caption("""
+This app uses a Retrieval-Augmented Generation (RAG) approach to provide clinical decision support. First, it takes your clinical note and uses an LLM to generate search queries. These queries are then used to retrieve relevant information from a medical guideline document stored in a vector database. 
+The system uses a "sliding window" approach for retrieval, which was chosen because the medical guideline has chapters of variable length. This method ensures that critical context is maintained by stitching together neighboring text chunks around a search result, preventing important information from being lost across section breaks. 
+It retrieves the top k neighbors (most relevant chunks) based on the search queries. 
+Finally, the LLM uses this retrieved context to generate a tailored management plan, complete with citations to the guideline.
+Additionally, a dosing table can be generated from the management plan. This process involves two more LLM steps: first, the plan is analyzed to create specific, dosing-focused search queries (e.g., 'prednisone dose mg/kg'). These queries then retrieve relevant sections from the guideline. Finally, the LLM uses this context to build a structured markdown table with details like drug, route, dose, and frequency.
+A dosing calculator is included to calculate dosages based on the recommendations.
+""")
 
 DB_PATH = str(Path.cwd() / "chroma_db")
 
@@ -362,7 +369,7 @@ if st.session_state.plan_ready and st.session_state.ctx:
     # --- Generate dosing table (placed under the plan) ---
     st.divider()
     st.caption("Uses the management plan to derive dosing queries, retrieves dosing text from the guideline, then renders a table.")
-    gen_table_here = st.button("Generate dosing table (from plan + guideline)")
+    gen_table_here = st.button("Generate dosing table (from plan + guideline)", type="primary")
 
     if gen_table_here:
         try:
