@@ -94,6 +94,13 @@ class RAGClient:
         self.coll = self.client.get_or_create_collection(name=collection)
         self.embedder = SentenceTransformer(embed_model)
 
+    def list_doc_ids(self) -> list[str]:
+        """Return sorted unique doc_id values from collection metadata."""
+        res = self.coll.get(include=["metadatas"])  # fine for MVP sizes (689 items)
+        metas = res.get("metadatas") or []
+        ids = {m.get("doc_id") for m in metas if m and m.get("doc_id")}
+        return sorted(ids)
+
     def _get(self, id_str):
         res = self.coll.get(ids=[id_str])
         if not res["ids"]:
