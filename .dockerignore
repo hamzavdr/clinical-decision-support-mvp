@@ -1,0 +1,17 @@
+# general
+.git
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/
+*.log
+node_modules/
+
+# data you don't need in the image
+data/*.pdf
+data/*.zip
+
+# keep chroma_db in the image (do NOT ignore it)
+# chroma_db/
