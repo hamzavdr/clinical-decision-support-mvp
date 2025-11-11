@@ -1,17 +1,17 @@
-# --- Core (pin to stable) ---
+# --- Core ---
 streamlit==1.51.0
 requests>=2.31.0
 python-dotenv>=1.0.0
-chromadb==0.5.15
-pydantic>=2.8.2
 tqdm>=4.66.0
 PyMuPDF==1.26.6
 
-# --- Embedding stack (CPU, Py3.11 wheels available) ---
+# --- Vector DB ---
+chromadb==0.5.15
+pydantic>=2.8.2
+
+# --- Embeddings stack (CPU) ---
 sentence-transformers==2.6.1
 transformers==4.44.2
 tokenizers==0.19.1
 safetensors==0.4.4
-torch==2.5.1+cpu
-
---extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1

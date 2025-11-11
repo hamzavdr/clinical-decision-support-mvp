@@ -1,32 +1,29 @@
 # Dockerfile
 FROM python:3.11-slim
 
-# Prevents prompts
-ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    TOKENIZERS_PARALLELISM=false
+
 WORKDIR /app
 
-# System deps (if PyMuPDF needed)
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl && \
+    build-essential curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy code first to leverage Docker layer caching
-COPY requirements.txt ./requirements.txt
+# Python deps (use your pinned requirements.txt)
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app
+# App + vector store (committed chroma_db/)
 COPY . .
 
-# Streamlit config for headless
-ENV STREAMLIT_PORT=7860
-ENV PORT=7860
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
-ENV STREAMLIT_SERVER_HEADLESS=true
+# Cloud Run will inject $PORT; default to 8080 for local runs
+ENV PORT=8080
+EXPOSE 8080
 
-# For sentence-transformers on CPU
-ENV TOKENIZERS_PARALLELISM=false
-ENV OMP_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
-
-EXPOSE 7860
-CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]
+CMD ["streamlit","run","app.py","--server.address=0.0.0.0","--server.port=8080"]
