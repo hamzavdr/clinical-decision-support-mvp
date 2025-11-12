@@ -1,17 +1,61 @@
-# general
+# --- VCS & local env ---
 .git
+.gitignore
 .venv/
+.env
+.env.*
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.log
 .DS_Store
 .vscode/
 .idea/
-*.log
+.streamlit/
+
+# --- Node / future FE assets ---
 node_modules/
+frontend/.next/
+frontend/dist/
+frontend/build/
 
-# data you don't need in the image
-data/*.pdf
-data/*.zip
+# --- Python build cache ---
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
 
-# keep chroma_db in the image (do NOT ignore it)
-# chroma_db/
+# --- Data & artifacts ---
+# Ignore vector DB by default (you ingest at runtime). If you decide to bake it,
+# remove this line.
+chroma_db/
+
+# If you keep large raw datasets, ignore by default:
+data/
+datasets/
+
+# Guideline PDFs: include the folder but feel free to be selective.
+# If you want to ignore everything in guideline_documents except specific PDFs:
+# guideline_documents/*
+# !guideline_documents/respiratory-stg-2024.pdf
+# (Otherwise, just keep the whole folder:)
+# (Uncomment the next line to ignore all and whitelist specific files.)
+# guideline_documents/*
+# !guideline_documents/*.pdf
+
+# --- Model caches (don’t send your local cache to the image) ---
+models/
+.cache/
+.huggingface/
+~/.cache/
+~/.huggingface/
+
+# --- Dev & misc ---
+*.svg
+*.drawio.bkp
+*.bak
+*.tmp
+Thumbs.db
+
+# --- Docker noise ---
+docker-compose.override.yml

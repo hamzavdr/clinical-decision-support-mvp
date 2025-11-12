@@ -1,27 +1,36 @@
-# Use a specific Python version for reproducibility
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Set the working directory in the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    TOKENIZERS_PARALLELISM=false \
+    SENTENCE_TRANSFORMERS_HOME=/app/models \
+    PORT=8080
+
 WORKDIR /app
 
-# --- Layer Caching for Dependencies ---
-# 1. Copy only the requirements.txt file first.
-# Docker will cache this layer. It will only re-run the pip install
-# if the requirements.txt file itself changes.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 
-# 2. Install the dependencies.
-# This is the slow step that will now be cached.
+# (Optional) Ensure CPU-only torch; uncomment if you see CUDA deps
+# RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+# RUN pip install --no-cache-dir -r requirements.txt
+
+# Otherwise, one pass:
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Copy Application Code ---
-# 3. Copy the rest of your application code.
-# Since your app code changes more frequently than your dependencies,
-# this layer will be rebuilt often, but the slow pip install step above will not.
 COPY . .
 
-# Expose the port Streamlit runs on
-EXPOSE 8501
+# Pre-cache the ST model
+RUN python - <<'PY'
+from sentence_transformers import SentenceTransformer
+SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+PY
 
-# Command to run the Streamlit app
-CMD ["streamlit", "run", "app.py"]
+EXPOSE 8080
+CMD ["streamlit","run","frontend/streamlit_app.py","--server.address=0.0.0.0","--server.port=8080"]

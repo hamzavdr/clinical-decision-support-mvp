@@ -4,6 +4,7 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 tqdm>=4.66.0
 PyMuPDF==1.26.6
+PyYAML>=6.0
 
 # --- Vector DB ---
 chromadb==0.5.15
