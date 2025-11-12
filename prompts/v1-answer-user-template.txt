@@ -1,0 +1,12 @@
+Visit note:
+{note}
+
+Context (from guideline):
+{context}
+
+Write a management plan tailored to the note. Include:
+- Assessment (severity reasoning)
+- Treatment (include steroid choice; do NOT invent doses)
+- Monitoring / reassessment
+- Criteria for escalation / disposition
+- Explicit citations using the page range.
