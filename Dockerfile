@@ -1,29 +1,27 @@
-# Dockerfile
-FROM python:3.11-slim
+# Use a specific Python version for reproducibility
+FROM python:3.10-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-    TOKENIZERS_PARALLELISM=false
-
+# Set the working directory in the container
 WORKDIR /app
 
-# Minimal system deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# Python deps (use your pinned requirements.txt)
+# --- Layer Caching for Dependencies ---
+# 1. Copy only the requirements.txt file first.
+# Docker will cache this layer. It will only re-run the pip install
+# if the requirements.txt file itself changes.
 COPY requirements.txt .
+
+# 2. Install the dependencies.
+# This is the slow step that will now be cached.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App + vector store (committed chroma_db/)
+# --- Copy Application Code ---
+# 3. Copy the rest of your application code.
+# Since your app code changes more frequently than your dependencies,
+# this layer will be rebuilt often, but the slow pip install step above will not.
 COPY . .
 
-# Cloud Run will inject $PORT; default to 8080 for local runs
-ENV PORT=8080
-EXPOSE 8080
+# Expose the port Streamlit runs on
+EXPOSE 8501
 
-CMD ["streamlit","run","app.py","--server.address=0.0.0.0","--server.port=8080"]
+# Command to run the Streamlit app
+CMD ["streamlit", "run", "app.py"]
