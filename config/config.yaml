@@ -1,6 +1,6 @@
 app:
   title: "Clinical Decision Support MVP"
-  default_doc_id: "SA_PHC_STG_2024_Respiratory"
+  default_doc_id: "SA_PHC_STG_2024"
 
 retrieval:
   embed_model: "sentence-transformers/all-MiniLM-L6-v2"
@@ -17,11 +17,13 @@ prompts:
   answer_system: "./prompts/v1-answer-system.txt"
   answer_user_template: "./prompts/v1-answer-user-template.txt"
 
+# These are the default values
 ingest:
+  embed_model: "sentence-transformers/paraphrase-MiniLM-L3-v2"
   window_chars: 2200
   overlap_chars: 400
-  doc_id: "SA_PHC_STG_2024_Respiratory"
-  pdf_path: "./guideline_documents/respiratory-stg-2024.pdf"
+  doc_id: "SA_PHC_STG_2024"
+  pdf_path: "./guideline_documents/sa-phc-stg-2024.pdf"
 
 openai:
   model: "gpt-4o-mini"

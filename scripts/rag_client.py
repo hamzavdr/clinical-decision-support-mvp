@@ -11,6 +11,10 @@ class RAGClient:
         self.coll = self.client.get_or_create_collection(name=collection)
         # force CPU (safe for containers)
         self.embedder = SentenceTransformer(embed_model, device="cpu")
+        
+        # Debug: Log collection info
+        print(f"[RAGClient] Initialized with db_path={db_path}, collection={collection}")
+        print(f"[RAGClient] Collection count: {self.coll.count()}")
 
     def _get(self, id_str):
         res = self.coll.get(ids=[id_str])
@@ -22,13 +26,30 @@ class RAGClient:
         return self._get(f"{doc_id}::{window_id}")
 
     def query(self, q: str, doc_id: str, k=4):
+        print(f"[RAGClient.query] Query: '{q[:50]}...', doc_id: '{doc_id}', k: {k}")
+        
         q_emb = self.embedder.encode([q]).tolist()
+        
+        # Debug: Try query WITHOUT doc_id filter first
+        res_all = self.coll.query(
+            query_embeddings=q_emb,
+            n_results=k,
+            include=["documents", "metadatas", "distances"],
+        )
+        print(f"[RAGClient.query] Query without filter returned: {len(res_all['ids'][0])} results")
+        if res_all['ids'][0]:
+            print(f"[RAGClient.query] Sample doc_ids in collection: {[m.get('doc_id') for m in res_all['metadatas'][0][:3]]}")
+        
+        # Now try with filter
         res = self.coll.query(
             query_embeddings=q_emb,
             n_results=k,
             where={"doc_id": doc_id},
             include=["documents", "metadatas", "distances"],
         )
+        
+        print(f"[RAGClient.query] Query WITH filter returned: {len(res['ids'][0])} results")
+        
         hits = []
         for i in range(len(res["ids"][0])):
             hits.append({
@@ -66,10 +87,14 @@ def plan_queries(note: str, planner_system: str, chat_fn) -> List[str]:
     msgs = [{"role": "system", "content": planner_system},
             {"role": "user", "content": note.strip()[:4000]}]
     out = chat_fn(msgs, temperature=0.0)
+    print(f"[plan_queries] LLM response: {out[:200]}...")
     try:
         data = json.loads(out)
-        return [q.strip() for q in data.get("queries", []) if q.strip()][:3] or ["croup steroid dose management"]
-    except Exception:
+        queries = [q.strip() for q in data.get("queries", []) if q.strip()][:3]
+        print(f"[plan_queries] Extracted queries: {queries}")
+        return queries or ["croup steroid dose management"]
+    except Exception as e:
+        print(f"[plan_queries] JSON parse error: {e}")
         return ["croup steroid dose management"]
 
 def answer_with_context(note: str, context: str, pages, answer_system: str, answer_user_tmpl: str, chat_fn) -> str:
