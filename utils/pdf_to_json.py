@@ -1,16 +1,18 @@
+# Converts PDF document to JSON; each page is one json object
+
 import fitz  # PyMuPDF
 import json
 import re
 
 PDF_PATH = "guideline_documents/sa-phc-stg-2024.pdf"
-OUTPUT_JSON = "guideline_documents/sa-phc-stg-2024.json"
+OUTPUT_JSON = "guideline_documents/sa-phc-stg-2024_pages.json"
 
 # --- Fractions for portrait vs landscape ---
-HEADER_FRACTION_PORTRAIT = 0.10
+HEADER_FRACTION_PORTRAIT = 0.125
 FOOTER_FRACTION_PORTRAIT = 0.10
 
-HEADER_FRACTION_LANDSCAPE = 0.07
-FOOTER_FRACTION_LANDSCAPE = 0.07
+HEADER_FRACTION_LANDSCAPE = 0.11
+FOOTER_FRACTION_LANDSCAPE = 0.11
 
 # --- page number detection patterns for footer cleaning ---
 PAGE_NUMBER_PATTERNS = [

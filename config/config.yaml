@@ -25,6 +25,26 @@ ingest:
   doc_id: "SA_PHC_STG_2024"
   pdf_path: "./guideline_documents/sa-phc-stg-2024.pdf"
 
+ingest_json:
+  # ---- Inputs ----
+  json_path: ./guideline_documents/sa-phc-stg-2024_pages_with_metadata.json   # your pages JSON/JSONL
+  doc_id: SA_PHC_STG_2024                            # or null to derive from filename
+
+  # ---- Chroma ----
+  db_path: ./chroma_db
+  collection: guidelines
+
+  # ---- Windowing ----
+  window_chars: 2200
+  overlap_chars: 400
+  include_page_types: [chapter_body]   # e.g. chapter_body,chapter_body2; skip references/TOC
+
+  # ---- Embeddings ----
+  embed_model: sentence-transformers/all-MiniLM-L6-v2
+  device: cpu                  # cpu is safest; use cuda if available
+  batch_size: 32               # embedding batch size
+
+
 openai:
   model: "gpt-4o-mini"
   api_base: "https://api.openai.com/v1"
