@@ -16,6 +16,10 @@ prompts:
   planner_system: "./prompts/v1-planner-system.txt"
   answer_system: "./prompts/v1-answer-system.txt"
   answer_user_template: "./prompts/v1-answer-user-template.txt"
+  dosing_queries_system: "./prompts/v1-dosing-queries-system.txt"
+  dosing_queries_user_template: "./prompts/v1-dosing-queries-user-template.txt"
+  dosing_table_system: "./prompts/v1-dosing-table-system.txt"
+  dosing_table_user_template: "./prompts/v1-dosing-table-user-template.txt"
 
 # These are the default values
 ingest:
