@@ -105,3 +105,39 @@ def answer_with_context(note: str, context: str, pages, answer_system: str, answ
             {"role": "user", "content": msg_user}]
     out = chat_fn(msgs, temperature=0.2)
     return out + f"\n\n**References:** {cite}"
+
+def dosing_queries_from_plan(plan: str, system_prompt: str, user_tmpl: str, chat_fn) -> List[str]:
+    if not plan.strip():
+        return []
+    msg_user = user_tmpl.format(plan=plan.strip()[:6000])
+    msgs = [{"role": "system", "content": system_prompt},
+            {"role": "user", "content": msg_user}]
+    out = chat_fn(msgs, temperature=0.0)
+    print(f"[dosing_queries_from_plan] LLM response: {out[:200]}...")
+    try:
+        data = json.loads(out)
+        queries = [q.strip() for q in data.get("queries", []) if q.strip()][:3]
+        print(f"[dosing_queries_from_plan] Extracted queries: {queries}")
+        return queries
+    except Exception as e:
+        print(f"[dosing_queries_from_plan] JSON parse error: {e}")
+        return []
+
+def dosing_table_from_context(plan: str, context: str, system_prompt: str, user_tmpl: str, chat_fn) -> Dict[str, Any]:
+    if not context.strip():
+        return {"status": "NO_TABLE", "rows": []}
+    msg_user = user_tmpl.format(plan=plan.strip()[:4000], context=context.strip()[:8000])
+    msgs = [{"role": "system", "content": system_prompt},
+            {"role": "user", "content": msg_user}]
+    out = chat_fn(msgs, temperature=0.1)
+    print(f"[dosing_table_from_context] LLM response: {out[:200]}...")
+    try:
+        data = json.loads(out)
+        status = data.get("status", "").upper()
+        rows = data.get("rows", [])
+        if status not in {"OK", "NO_TABLE"}:
+            status = "NO_TABLE"
+        return {"status": status, "rows": rows}
+    except Exception as e:
+        print(f"[dosing_table_from_context] JSON parse error: {e}")
+        return {"status": "NO_TABLE", "rows": [], "error": str(e)}

@@ -1,14 +1,22 @@
-import os, json, yaml, pathlib, streamlit as st
-from scripts.ingest_pdf import ingest_pdf
-from scripts.llm_helper import configure as configure_llm, openai_chat
-from scripts.rag_client import RAGClient, load_prompt, plan_queries, answer_with_context
-import os, pathlib
+import os
+import json
+import pathlib
+import yaml
 import streamlit as st
-from scripts.ingest_pdf import ingest_pdf
-from scripts.rag_client import RAGClient
 from chromadb.config import Settings
 import chromadb
 from dotenv import load_dotenv
+
+from scripts.ingest_pdf import ingest_pdf
+from scripts.llm_helper import configure as configure_llm, openai_chat
+from scripts.rag_client import (
+    RAGClient,
+    load_prompt,
+    plan_queries,
+    answer_with_context,
+    dosing_queries_from_plan,
+    dosing_table_from_context,
+)
 
 # --- Load config
 load_dotenv()
@@ -39,14 +47,54 @@ def _chroma_count(db_path: str, collection: str = "guidelines") -> int:
     except Exception:
         return -1
 
+def _init_state():
+    st.session_state.setdefault("plan_state", None)
+    st.session_state.setdefault("dosing_state", None)
+
+def _gather_windows(rag, queries, doc_id, k, above, below, cap_words):
+    windows, seen = [], set()
+    query_details = []
+    for q in queries:
+        hits = rag.query(q, doc_id=doc_id, k=k)
+        dupes = 0
+        for h in hits:
+            key = (h["metadata"]["doc_id"], h["metadata"]["window_id"])
+            if key in seen:
+                dupes += 1
+                continue
+            seen.add(key)
+            stitched = rag.stitch_neighbors(h, above=above, below=below, cap_words=cap_words)
+            if stitched:
+                windows.append({"text": stitched["text"], "pages": stitched["pages"], "q": q, "dist": h["distance"]})
+        query_details.append({"query": q, "hit_count": len(hits), "duplicates": dupes})
+    windows.sort(key=lambda x: x["dist"])
+    return windows, query_details
+
+def _combine_context(windows, limit=3):
+    if not windows:
+        return "", (0, 0)
+    trimmed = windows[:limit]
+    context = "\n\n---\n\n".join([w["text"] for w in trimmed])
+    start = min(w["pages"][0] for w in trimmed)
+    end = max(w["pages"][1] for w in trimmed)
+    return context, (start, end)
+
+def _format_citation(doc_label: str, pages):
+    start, end = pages
+    if start == end:
+        page_text = f"p. {start}"
+    else:
+        page_text = f"p. {start}-{end}"
+    return f"{doc_label} {page_text}"
+
 # --- UI
 st.set_page_config(page_title=CFG["app"]["title"], layout="wide")
 st.title(CFG["app"]["title"])
 st.caption("Develop branch demo")
+_init_state()
 
 with st.sidebar:
     st.header("Database Settings")
-    # --- Ensure store exists? (optional: call ingest on first run)
     st.write(f"Vector DB: {DB_PATH}")
     if not pathlib.Path(DB_PATH).exists():
         st.warning("Vector store path not found. Ingest first via scripts/ingest_pdf.py")
@@ -63,6 +111,10 @@ note = st.text_area("Visit note", height=160, value="3-year-old with barky cough
 planner_system = load_prompt(CFG["prompts"]["planner_system"])
 answer_system = load_prompt(CFG["prompts"]["answer_system"])
 answer_user_tmpl = load_prompt(CFG["prompts"]["answer_user_template"])
+dosing_queries_system = load_prompt(CFG["prompts"]["dosing_queries_system"])
+dosing_queries_user_tmpl = load_prompt(CFG["prompts"]["dosing_queries_user_template"])
+dosing_table_system = load_prompt(CFG["prompts"]["dosing_table_system"])
+dosing_table_user_tmpl = load_prompt(CFG["prompts"]["dosing_table_user_template"])
 
 # --- Vectorise controls ---
 # st.subheader("📚 Vectorise guideline PDF into Chroma")
@@ -89,112 +141,200 @@ answer_user_tmpl = load_prompt(CFG["prompts"]["answer_user_template"])
 #         else:
 #             st.warning("Vector DB not readable yet.")
 
-#     run_vec = st.button("Vectorise", type="primary", use_container_width=True)
-#     if run_vec:
-#         # Validate paths
-#         if not pathlib.Path(pdf_path).exists():
-#             st.error(f"PDF not found at: {pdf_path}")
-#         else:
-#             pathlib.Path(db_path).mkdir(parents=True, exist_ok=True)
-#             with st.spinner("Ingesting PDF and building embeddings (CPU)…"):
-#                 try:
-#                     # Uses SentenceTransformers on CPU (as in your ingest script)
-#                     ingest_pdf(
-#                         pdf_path=pdf_path,
-#                         doc_id=doc_id,
-#                         db_path=db_path,
-#                         collection="guidelines",
-#                         window_chars=window_chars,
-#                         overlap_chars=overlap_chars,
-#                     )
-#                     after = _chroma_count(db_path)
-#                     if after >= 0:
-#                         st.success(f"Vectorisation complete. Collection now has **{after}** items.")
-#                     else:
-#                         st.success("Vectorisation complete.")
-#                 except Exception as e:
-#                     st.exception(e)
+generate_plan = st.button("Generate plan", type="primary", use_container_width=True)
 
-if st.button("Generate plan", type="primary", use_container_width=True):
-    st.write("---")
-    st.subheader("🔍 Debug Info")
-    
-    # Show what we're querying with
-    st.write(f"**Doc ID being queried:** `{doc_id}`")
-    st.write(f"**DB Path:** `{DB_PATH}`")
-    st.write(f"**Collection:** `{CFG['retrieval']['collection']}`")
-    
-    # Initialize RAG client
+if generate_plan:
+    st.session_state["dosing_state"] = None
     rag = RAGClient(
         db_path=DB_PATH,
         collection=CFG["retrieval"]["collection"],
         embed_model=CFG["retrieval"]["embed_model"],
     )
-    
-    # Generate queries
     queries = plan_queries(note, planner_system, openai_chat)
-    st.markdown("### Queries generated")
-    st.code(json.dumps({"queries": queries}, indent=2))
-
-    # Retrieve windows
-    windows, seen = [], set()
-    for q in queries:
-        st.write(f"Querying: `{q}`")
-        hits = rag.query(q, doc_id=doc_id, k=k)
-        st.write(f"  → Got {len(hits)} hits")
-        
-        for h in hits:
-            key = (h["metadata"]["doc_id"], h["metadata"]["window_id"])
-            if key in seen: 
-                st.write(f"  → Skipping duplicate window {key}")
-                continue
-            seen.add(key)
-            stitched = rag.stitch_neighbors(h, above=above, below=below, cap_words=CFG["retrieval"]["cap_words"])
-            if stitched:
-                windows.append({"text": stitched["text"], "pages": stitched["pages"], "q": q, "dist": h["distance"]})
-    
-    st.write(f"**Total unique windows retrieved:** {len(windows)}")
-    
-    # Sort and generate answer
-    windows.sort(key=lambda x: x["dist"])
+    windows, query_details = _gather_windows(
+        rag,
+        queries,
+        doc_id=doc_id,
+        k=k,
+        above=above,
+        below=below,
+        cap_words=CFG["retrieval"]["cap_words"],
+    )
     if not windows:
+        st.session_state["plan_state"] = None
         st.error("❌ No context retrieved.")
         st.info("Check the terminal/console for debug logs to see what's happening.")
     else:
-        # Build and display the context that will be sent to LLM
-        context = "\n\n---\n\n".join([w["text"] for w in windows][:3])
-        pages = windows[0]["pages"]
-        
-        # Display retrieved context
-        st.markdown("---")
-        st.markdown("### 📄 Retrieved Context")
-        st.caption(f"Showing top 3 windows | Pages: {pages[0]}-{pages[1]}")
-        
-        # Show each window separately
-        for i, w in enumerate(windows[:3], 1):
-            with st.expander(f"Window {i} - Pages {w['pages'][0]}-{w['pages'][1]} (Distance: {w['dist']:.4f})", expanded=False):
-                st.caption(f"**Matched query:** `{w['q']}`")
-                st.text_area(
-                    f"Window {i} content",
-                    value=w["text"],
-                    height=300,
-                    disabled=True,
-                    label_visibility="collapsed"
-                )
-        
-        # Also show combined context
-        with st.expander("View combined context (sent to LLM)", expanded=False):
-            st.text_area(
-                "Combined context",
-                value=context,
-                height=400,
-                disabled=True,
-                label_visibility="collapsed"
-            )
-        
-        # Generate management plan
-        st.markdown("---")
-        st.markdown("### 💊 Management Plan")
+        context, pages = _combine_context(windows)
         with st.spinner("Generating plan..."):
             plan = answer_with_context(note, context, pages, answer_system, answer_user_tmpl, openai_chat)
-        st.write(plan)
+        st.session_state["plan_state"] = {
+            "doc_id": doc_id,
+            "db_path": DB_PATH,
+            "collection": CFG["retrieval"]["collection"],
+            "queries": queries,
+            "query_details": query_details,
+            "windows": windows,
+            "context": context,
+            "pages": pages,
+            "plan": plan,
+            "note": note,
+            "k": k,
+            "above": above,
+            "below": below,
+        }
+
+plan_state = st.session_state.get("plan_state")
+if plan_state:
+    st.write("---")
+    st.subheader("🔍 Debug Info")
+    st.write(f"**Doc ID being queried:** `{plan_state['doc_id']}`")
+    st.write(f"**DB Path:** `{plan_state['db_path']}`")
+    st.write(f"**Collection:** `{plan_state['collection']}`")
+    st.markdown("### Queries generated")
+    st.code(json.dumps({"queries": plan_state["queries"]}, indent=2))
+
+    for detail in plan_state["query_details"]:
+        st.write(f"Querying: `{detail['query']}`")
+        st.write(f"  → Got {detail['hit_count']} hits")
+        if detail.get("duplicates"):
+            st.write(f"  → Skipped {detail['duplicates']} duplicate windows")
+
+    st.write(f"**Total unique windows retrieved:** {len(plan_state['windows'])}")
+
+    st.markdown("---")
+    st.markdown("### 📄 Retrieved Context")
+    pages = plan_state["pages"]
+    st.caption(f"Showing top 3 windows | Pages: {pages[0]}-{pages[1]}")
+
+    for i, w in enumerate(plan_state["windows"][:3], 1):
+        with st.expander(f"Window {i} - Pages {w['pages'][0]}-{w['pages'][1]} (Distance: {w['dist']:.4f})", expanded=False):
+            st.caption(f"**Matched query:** `{w['q']}`")
+            st.text_area(
+                f"Window {i} content",
+                value=w["text"],
+                height=300,
+                disabled=True,
+                label_visibility="collapsed",
+            )
+
+    with st.expander("View combined context (sent to LLM)", expanded=False):
+        st.text_area(
+            "Combined context",
+            value=plan_state["context"],
+            height=400,
+            disabled=True,
+            label_visibility="collapsed",
+        )
+
+    st.markdown("---")
+    st.markdown("### 💊 Management Plan")
+    st.write(plan_state["plan"])
+
+    st.markdown("---")
+    st.markdown("### 💉 Dosing Table")
+    generate_dosing = st.button("Generate Dosing Table", type="secondary", use_container_width=True)
+
+    if generate_dosing:
+        rag = RAGClient(
+            db_path=plan_state["db_path"],
+            collection=plan_state["collection"],
+            embed_model=CFG["retrieval"]["embed_model"],
+        )
+        dosing_queries = dosing_queries_from_plan(
+            plan_state["plan"],
+            dosing_queries_system,
+            dosing_queries_user_tmpl,
+            openai_chat,
+        )
+        if not dosing_queries:
+            st.session_state["dosing_state"] = None
+            st.warning("No dosing-focused queries could be generated from the management plan.")
+        else:
+            windows, query_details = _gather_windows(
+                rag,
+                dosing_queries,
+                doc_id=plan_state["doc_id"],
+                k=plan_state["k"],
+                above=plan_state["above"],
+                below=plan_state["below"],
+                cap_words=CFG["retrieval"]["cap_words"],
+            )
+            if not windows:
+                st.session_state["dosing_state"] = None
+                st.error("No dosing context retrieved from the guideline.")
+            else:
+                context, pages = _combine_context(windows)
+                with st.spinner("Generating dosing table..."):
+                    table = dosing_table_from_context(
+                        plan_state["plan"],
+                        context,
+                        dosing_table_system,
+                        dosing_table_user_tmpl,
+                        openai_chat,
+                    )
+                if table.get("status") != "OK" or not table.get("rows"):
+                    st.session_state["dosing_state"] = None
+                    st.warning("LLM could not build a dosing table from the retrieved context.")
+                else:
+                    st.session_state["dosing_state"] = {
+                        "queries": dosing_queries,
+                        "query_details": query_details,
+                        "windows": windows,
+                        "context": context,
+                        "pages": pages,
+                        "table": table,
+                        "doc_id": plan_state["doc_id"],
+                    }
+
+    dosing_state = st.session_state.get("dosing_state")
+    if dosing_state:
+        citation_label = _format_citation(dosing_state["doc_id"], dosing_state["pages"])
+        st.caption(f"Dosing context sourced from `{dosing_state['doc_id']}` ({citation_label})")
+        st.markdown("#### Queries used for dosing search")
+        st.code(json.dumps({"queries": dosing_state["queries"]}, indent=2))
+        for detail in dosing_state["query_details"]:
+            st.write(f"Querying: `{detail['query']}`")
+            st.write(f"  → Got {detail['hit_count']} hits")
+            if detail.get("duplicates"):
+                st.write(f"  → Skipped {detail['duplicates']} duplicate windows")
+
+        st.caption(f"Showing top 3 dosing windows | Pages: {dosing_state['pages'][0]}-{dosing_state['pages'][1]}")
+        for i, w in enumerate(dosing_state["windows"][:3], 1):
+            with st.expander(f"Dosing window {i} - Pages {w['pages'][0]}-{w['pages'][1]} (Distance: {w['dist']:.4f})", expanded=False):
+                st.caption(f"**Matched query:** `{w['q']}`")
+                st.text_area(
+                    f"Dosing window {i} content",
+                    value=w["text"],
+                    height=250,
+                    disabled=True,
+                    label_visibility="collapsed",
+                )
+
+        with st.expander("View combined dosing context", expanded=False):
+            st.text_area(
+                "Dosing context",
+                value=dosing_state["context"],
+                height=350,
+                disabled=True,
+                label_visibility="collapsed",
+            )
+
+        st.markdown("#### Generated dosing table")
+        table_rows = []
+        desired_cols = [
+            "drug",
+            "route",
+            "rule_mg_per_kg",
+            "max_mg",
+            "rounding",
+            "usual_formulations",
+            "frequency",
+            "duration",
+            "citation",
+        ]
+        for row in dosing_state["table"]["rows"]:
+            filled = {col: row.get(col, "") for col in desired_cols}
+            filled["citation"] = citation_label
+            table_rows.append(filled)
+        st.table(table_rows)
