@@ -12,10 +12,6 @@ __pycache__/
 chroma_db/
 *.sqlite3
 
-# data (allow specific PDFs if you want)
-guideline_documents/*
-!guideline_documents/respiratory-stg-2024.pdf
-
 # streamlit & node (future FE)
 .streamlit/
 node_modules/
