@@ -5,6 +5,7 @@ Rules:
 - Include only concise queries (5–12 words).
 - Prefer terms that likely appear in the guideline (no creative synonyms).
 - If no medication appears in the plan, return an empty list.
+- Include a query relating to the primary diagnosis in the management plan.
 
 Return ONLY JSON:
 {"queries":["q1","q2", "..."]}
