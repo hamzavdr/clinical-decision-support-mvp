@@ -15,3 +15,6 @@ chroma_db/
 # streamlit & node (future FE)
 .streamlit/
 node_modules/
+
+# Cloud config
+.gcloud_config/

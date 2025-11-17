@@ -2,10 +2,18 @@ app:
   title: "Clinical Decision Support MVP"
   default_doc_id: "SA_PHC_STG_2024"
 
+database:
+  backend: "postgres"            # options: postgres, chroma
+  pg:
+    table: "guideline_embeddings"
+  chroma:
+    db_path: "./chroma_db"
+    collection: "guidelines"
+
 retrieval:
   embed_model: "sentence-transformers/all-MiniLM-L6-v2"
   collection: "guidelines"
-  db_path: "./chroma_db"         # local path (override with env CHROMA_DB_DIR)
+  db_path: "./chroma_db"         # legacy chroma path (override with env CHROMA_DB_DIR)
   k: 4
   above: 1
   below: 2
