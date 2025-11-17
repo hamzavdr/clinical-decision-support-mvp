@@ -1,6 +1,6 @@
 app:
   title: "Clinical Decision Support MVP"
-  default_doc_id: "SA_PHC_STG_2024"
+  default_doc_id: "SA_PHC_STG_2024_PAGES_WITH_METADATA"
 
 database:
   backend: "postgres"            # options: postgres, chroma
