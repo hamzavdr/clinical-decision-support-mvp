@@ -27,10 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Pre-cache the ST model
-RUN python - <<'PY'
-from sentence_transformers import SentenceTransformer
-SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
-PY
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')"
 
 EXPOSE 8080
-CMD ["streamlit","run","frontend/streamlit_app.py","--server.address=0.0.0.0","--server.port=8080"]
+CMD ["streamlit","run","streamlit_app.py","--server.address=0.0.0.0","--server.port=8080"]
