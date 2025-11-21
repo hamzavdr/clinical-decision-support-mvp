@@ -1,0 +1,11 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/clinical-decision-support-mvp:$COMMIT_SHA', '.']
+
+# Push the image to Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/clinical-decision-support-mvp:$COMMIT_SHA'
+
+# Fix the error by specifying your logs bucket
+logsBucket: 'gs://personal-projects-478214-cloudbuild-logs'
