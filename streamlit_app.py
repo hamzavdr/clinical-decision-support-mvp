@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from scripts.ingest_pdf import ingest_pdf
 from scripts.llm_helper import configure as configure_llm, openai_chat
-from scripts.pg_rag_client import PgVectorRAGClient
 from scripts.rag_client import (
     RAGClient,
     load_prompt,
@@ -18,12 +17,13 @@ from scripts.rag_client import (
     dosing_queries_from_plan,
     dosing_table_from_context,
 )
+from scripts.vector_store import ensure_local_vector_store, VectorStoreBootstrapError
 
 # --- Load config
 load_dotenv()
 CFG = yaml.safe_load(open("./config/config.yaml", "r"))
 DB_CFG = CFG.get("database", {})
-DB_BACKEND = DB_CFG.get("backend", "chroma").lower()
+CHROMA_CFG = DB_CFG.get("chroma", {})
 
 # Check for OpenAI API key
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -33,8 +33,10 @@ if not openai_api_key:
     st.stop() # Stop the app if the key is missing
 
 DOC_ID = CFG["app"]["default_doc_id"]
-CHROMA_DEFAULT_PATH = DB_CFG.get("chroma", {}).get("db_path", CFG["retrieval"]["db_path"])
-DB_PATH = os.getenv("CHROMA_DB_DIR", CHROMA_DEFAULT_PATH)
+CHROMA_DEFAULT_PATH = CHROMA_CFG.get("db_path", CFG["retrieval"]["db_path"])
+DB_PATH = pathlib.Path(os.getenv("CHROMA_DB_DIR", CHROMA_DEFAULT_PATH)).expanduser().resolve()
+COLLECTION = CHROMA_CFG.get("collection", CFG["retrieval"]["collection"])
+VECTOR_SENTINEL = os.getenv("VECTOR_STORE_SENTINEL", "chroma.sqlite3")
 
 # --- Configure LLM helper
 # Assuming configure_llm uses os.getenv("OPENAI_API_KEY") internally or the openai library picks it up.
@@ -92,27 +94,25 @@ def _format_citation(doc_label: str, pages):
     return f"{doc_label} {page_text}"
 
 def _vector_store_label():
-    if DB_BACKEND == "postgres":
-        table = DB_CFG.get("pg", {}).get("table", "guideline_embeddings")
-        return f"Postgres (table `{table}`)"
     return f"Chroma path `{DB_PATH}`"
 
+
+@st.cache_resource(show_spinner="Loading vector store...")
+def _load_rag_client(db_path: str, collection: str):
+    local_path = ensure_local_vector_store(db_path)
+    return RAGClient(
+        db_path=str(local_path),
+        collection=collection,
+        embed_model=CFG["retrieval"]["embed_model"],
+    )
+
+
 def _make_rag_client():
-    if DB_BACKEND == "postgres":
-        pg_cfg = DB_CFG.get("pg", {})
-        table = pg_cfg.get("table", "guideline_embeddings")
-        try:
-            return PgVectorRAGClient(pg_cfg, CFG["retrieval"]["embed_model"], table)
-        except Exception as exc:
-            st.error(f"Unable to connect to Postgres vector store: {exc}")
-            st.stop()
-    else:
-        collection = DB_CFG.get("chroma", {}).get("collection", CFG["retrieval"]["collection"])
-        return RAGClient(
-            db_path=DB_PATH,
-            collection=collection,
-            embed_model=CFG["retrieval"]["embed_model"],
-        )
+    try:
+        return _load_rag_client(str(DB_PATH), COLLECTION)
+    except VectorStoreBootstrapError as exc:
+        st.error(f"Unable to prepare vector store: {exc}")
+        st.stop()
 
 # --- UI
 st.set_page_config(page_title=CFG["app"]["title"], layout="wide")
@@ -121,10 +121,13 @@ st.caption("Develop branch demo")
 _init_state()
 
 with st.sidebar:
-    st.header("Database Settings")
+    st.header("Vector Store")
     st.write(f"Vector DB: {_vector_store_label()}")
-    if DB_BACKEND != "postgres" and not pathlib.Path(DB_PATH).exists():
-        st.warning("Vector store path not found. Ingest first via scripts/ingest_pdf.py")
+    sentinel_path = DB_PATH / VECTOR_SENTINEL
+    if sentinel_path.exists():
+        st.success("Local cache ready.")
+    else:
+        st.info("Local cache missing; will download from GCS on first load.")
     doc_id = st.text_input("Guideline Document", value=DOC_ID)
 
     st.header("Retrieval Settings")
@@ -193,7 +196,6 @@ if generate_plan:
             plan = answer_with_context(note, context, pages, answer_system, answer_user_tmpl, openai_chat)
         st.session_state["plan_state"] = {
             "doc_id": doc_id,
-            "backend": DB_BACKEND,
             "vector_info": _vector_store_label(),
             "collection": DB_CFG.get("chroma", {}).get("collection", CFG["retrieval"]["collection"]),
             "queries": queries,
@@ -214,8 +216,7 @@ if plan_state:
     st.subheader("🔍 Debug Info")
     st.write(f"**Doc ID being queried:** `{plan_state['doc_id']}`")
     st.write(f"**Vector Store:** {plan_state.get('vector_info', _vector_store_label())}")
-    if DB_BACKEND != "postgres":
-        st.write(f"**Collection:** `{plan_state.get('collection', CFG['retrieval']['collection'])}`")
+    st.write(f"**Collection:** `{plan_state.get('collection', CFG['retrieval']['collection'])}`")
     st.markdown("### Queries generated")
     st.code(json.dumps({"queries": plan_state["queries"]}, indent=2))
 

@@ -17,5 +17,5 @@ tokenizers==0.19.1
 safetensors==0.4.4
 torch==2.5.1
 
-# --- Database clients ---
-psycopg[binary]>=3.1.0
+# --- Cloud + storage helpers ---
+google-cloud-storage>=2.14.0
